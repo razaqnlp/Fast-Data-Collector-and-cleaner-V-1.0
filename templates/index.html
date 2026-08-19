@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Romanized Pashto Sentiment Analyzer</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f0f17;
+      color: #e0e0ff;
+      margin: 0;
+      padding: 30px;
+      line-height: 1.6;
+    }
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      background: #161b22;
+      padding: 30px;
+      border-radius: 12px;
+      border: 1px solid #30363d;
+    }
+    h1 {
+      color: #58a6ff;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .subtitle {
+      text-align: center;
+      color: #888;
+      margin-bottom: 24px;
+    }
+    .settings-btn {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #238636;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      z-index: 1000;
+    }
+    .settings-btn:hover {
+      background: #2ea043;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 2000;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-content {
+      background: #161b22;
+      padding: 28px;
+      border-radius: 12px;
+      width: 90%;
+      max-width: 600px;
+      border: 1px solid #30363d;
+      position: relative;
+    }
+    .close {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      font-size: 28px;
+      color: #888;
+      cursor: pointer;
+    }
+    label {
+      display: block;
+      margin: 16px 0 6px;
+      font-weight: bold;
+    }
+    input, select, input[type="file"] {
+      width: 100%;
+      padding: 10px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      color: white;
+      font-size: 15px;
+      box-sizing: border-box;
+    }
+    input:focus, select:focus {
+      outline: none;
+      border-color: #58a6ff;
+      box-shadow: 0 0 0 3px rgba(88,166,255,0.25);
+    }
+    button.submit-btn {
+      width: 100%;
+      padding: 14px;
+      margin-top: 24px;
+      background: #238636;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 17px;
+      cursor: pointer;
+    }
+    button.submit-btn:hover {
+      background: #2ea043;
+    }
+    .flash {
+      padding: 12px;
+      margin: 12px 0;
+      border-radius: 6px;
+    }
+    .error   { background: #8b1e22; }
+    .warning { background: #7d4f1e; }
+    .info    { background: #1e4b6e; }
+    .success { background: #1f6d3b; }
+    .mode-section {
+      border: 1px solid #444;
+      padding: 18px;
+      border-radius: 8px;
+      margin: 20px 0;
+      background: #0d1117;
+    }
+    .key-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .data-container {
+      margin: 32px 0;
+      padding: 20px;
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+    }
+    .data-container h3 {
+      margin-top: 0;
+      color: #79c0ff;
+    }
+    pre.preview {
+      background: #000;
+      padding: 14px;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-size: 0.92em;
+      white-space: pre-wrap;
+      color: #ddd;
+    }
+    .stats {
+      background: #1e1e2e;
+      padding: 16px;
+      border-radius: 8px;
+      margin: 16px 0;
+      font-size: 0.98em;
+    }
+    .export-buttons {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+      margin-top: 24px;
+    }
+    .export-btn {
+      padding: 12px 24px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 15px;
+    }
+    .export-btn:hover {
+      background: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Settings Button -->
+  <button class="settings-btn" onclick="openSettings()">⚙️</button>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal">
+    <form method="POST" action="/save_settings">
+      <div class="modal-content">
+        <span class="close" onclick="closeSettings()">&times;</span>
+        <h2>API Settings</h2>
+        <p style="color:#aaa; font-size:0.9em;">Keys are saved automatically even after restart.</p>
+
+        <label>YouTube Data API Key</label>
+        <input type="password" name="yt_api_key" value="{{ config.yt_api_key or '' }}" placeholder="AIzaSy...">
+
+        <h3 style="margin-top:28px; color:#79c0ff;">Groq API Keys (for FreeFlow)</h3>
+        <div class="key-group">
+          <div>
+            <label>Groq Key 1</label>
+            <input type="password" name="groq_key1" value="{{ config.groq_key1 or '' }}" placeholder="gsk_...">
+          </div>
+          <div>
+            <label>Groq Key 2 (optional)</label>
+            <input type="password" name="groq_key2" value="{{ config.groq_key2 or '' }}" placeholder="gsk_...">
+          </div>
+        </div>
+
+        <h3 style="margin-top:28px; color:#79c0ff;">Gemini API Keys (for FreeFlow)</h3>
+        <div class="key-group">
+          <div>
+            <label>Gemini Key 1</label>
+            <input type="password" name="gemini_key1" value="{{ config.gemini_key1 or '' }}" placeholder="AIzaSy...">
+          </div>
+          <div>
+            <label>Gemini Key 2 (optional)</label>
+            <input type="password" name="gemini_key2" value="{{ config.gemini_key2 or '' }}" placeholder="AIzaSy...">
+          </div>
+        </div>
+
+        <h3 style="margin-top:28px; color:#79c0ff;">ChatGPT / OpenAI</h3>
+        <div>
+          <label>ChatGPT API Key (OpenAI)</label>
+          <input type="password" name="chatgpt_api_key" value="{{ config.chatgpt_api_key or '' }}" placeholder="sk-...">
+          <small style="color:#aaa; display:block; margin-top:6px;">Optional: provide an OpenAI key to use ChatGPT (select in main form).</small>
+        </div>
+
+        <button type="submit" class="submit-btn" style="margin-top:32px;">Save & Close</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="container">
+    <h1>Romanized Pashto Sentiment Analyzer</h1>
+    <p class="subtitle">Fetch or upload → Clean → Analyze Sentiment (only Romanized Pashto)</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, msg in messages %}
+          <div class="flash {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST" enctype="multipart/form-data">
+
+      <label>LLM Provider</label>
+      <select name="llm_choice">
+        <option value="freeflow">FreeFlow (Gemini/Groq priority)</option>
+        <option value="chatgpt">ChatGPT (OpenAI)</option>
+      </select>
+
+      <label>Input Mode</label>
+      <select name="mode" onchange="toggleMode(this.value)">
+        <option value="youtube">Fetch from YouTube Video</option>
+        <option value="upload">Upload CSV File</option>
+      </select>
+
+      <div id="youtube-mode" class="mode-section">
+        <label>Video ID</label>
+        <input type="text" name="video_id" placeholder="e.g. -15tDWN6Ad8">
+        <small style="color:#aaa;">(YouTube API key is saved in Settings)</small>
+      </div>
+
+      <div id="upload-mode" class="mode-section" style="display:none;">
+        <label>Upload Comments CSV</label>
+        <input type="file" name="csv_file" accept=".csv">
+        <small style="color:#aaa;">One column with comments (header optional)</small>
+      </div>
+
+      <button type="submit" class="submit-btn">Process Comments → Analyze Sentiment</button>
+    </form>
+
+    <!-- Stats -->
+    {% if stats.total_imported > 0 %}
+      <div class="stats">
+        <strong>Source:</strong> {{ stats.source }}<br>
+        <strong>Imported comments:</strong> {{ stats.total_imported }}<br>
+        <strong>Excluded (non-Romanized / empty):</strong> {{ stats.excluded }}<br>
+        <strong>Cleaned & kept (possible Romanized Pashto):</strong> {{ stats.after_cleaning }}
+      </div>
+    {% endif %}
+
+    <!-- Raw Data Preview -->
+    {% if raw_preview %}
+      <div class="data-container">
+        <h3>Imported Raw Comments (first 20 shown)</h3>
+        <pre class="preview">
+{% for comment in raw_preview %}
+{{ comment | e }}
+{% endfor %}
+        </pre>
+      </div>
+    {% endif %}
+
+    <!-- Cleaned Data Preview -->
+    {% if cleaned_preview %}
+      <div class="data-container">
+        <h3>Cleaned Romanized Comments (first 20 shown)</h3>
+        <pre class="preview">
+{% for comment in cleaned_preview %}
+{{ comment | e }}
+{% endfor %}
+        </pre>
+      </div>
+    {% endif %}
+
+    <!-- Result CSV -->
+    {% if result_csv %}
+      <div class="data-container">
+        <h3>Final Sentiment Analysis CSV</h3>
+        <pre class="preview">{{ result_csv | e }}</pre>
+
+        <div class="export-buttons">
+          <a href="{{ url_for('export', filetype='csv') }}" class="export-btn">Export CSV</a>
+          <a href="{{ url_for('export', filetype='excel') }}" class="export-btn">Export Excel</a>
+        </div>
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    function openSettings() {
+      document.getElementById("settingsModal").style.display = "flex";
+    }
+
+    function closeSettings() {
+      document.getElementById("settingsModal").style.display = "none";
+    }
+
+    function toggleMode(mode) {
+      document.getElementById("youtube-mode").style.display = mode === "youtube" ? "block" : "none";
+      document.getElementById("upload-mode").style.display = mode === "upload" ? "block" : "none";
+    }
+
+    // Initial state
+    toggleMode("youtube");
+  </script>
+
+</body>
+</html>

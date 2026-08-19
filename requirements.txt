@@ -1,0 +1,6 @@
+Flask
+Flask-Session
+google-api-python-client
+freeflow-llm
+pandas
+openpyxl
