@@ -1,52 +1,34 @@
 # Romanized Pashto Sentiment Analyzer
 
-A small Flask web app that fetches YouTube comments or accepts a CSV upload, removes links and unsupported text, and uses an LLM to classify Romanized Pashto comments as Positive, Negative, or Neutral. Results can be downloaded as CSV or Excel.
+A FastAPI app for collecting YouTube comments or uploading a CSV, cleaning Romanized Pashto text, classifying sentiment, and exporting CSV or Excel results.
 
 ## Requirements
 
 - Python 3.10 or newer
-- A YouTube Data API v3 key when using YouTube input
-- At least one LLM key: Groq or Gemini for FreeFlow, or OpenAI for ChatGPT mode
+- A YouTube Data API v3 key for YouTube input
+- A Groq or Gemini key for FreeFlow, or an OpenAI key for ChatGPT mode
+- Windows Credential Manager for secure local API-key storage
 
 ## Setup
 
-1. Create and activate a virtual environment:
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+$env:FLASK_SECRET_KEY = "replace-with-a-long-random-value"
+python app.py
+```
 
-   ```powershell
-   py -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   ```
+Open http://127.0.0.1:5000.
 
-2. Install dependencies:
+## Security
 
-   ```powershell
-   pip install -r requirements.txt
-   ```
+Enter API keys through the in-app Settings panel. On Windows, `keyring` stores them in Windows Credential Manager. Keys are never written to the repository or rendered back into the browser. Blank fields keep existing stored keys unchanged.
 
-3. Copy `config.example.json` to `config.json` and enter **your own** keys, or enter them through the app's Settings button. Never commit `config.json`.
+The app defaults to localhost and uses Uvicorn's development server. Set `FLASK_SECRET_KEY` before use and use a production ASGI server plus authentication before exposing it beyond the local machine. Never commit API keys, session files, `.env` files, or generated data.
 
-4. Set a private Flask session secret for anything beyond local testing:
-
-   ```powershell
-   $env:FLASK_SECRET_KEY = "replace-with-a-long-random-value"
-   ```
-
-5. Start the app:
-
-   ```powershell
-   python app.py
-   ```
-
-6. Open http://127.0.0.1:5000 in your browser.
-
-## API keys and security
-
-Please use your own YouTube API key and your own LLM API key(s). The app stores keys locally in the ignored `config.json` file and does not need them in source code.
-
-The keys previously present in this project have been removed from the files, but removal does not revoke keys that may already have been copied. The owner should revoke or rotate every previously exposed YouTube, Groq, Gemini, and OpenAI key in the corresponding provider dashboard before using this project publicly.
-
-Do not commit `config.json`, `.env`, session files, or API keys. If a secret is ever committed, rotate it immediately and remove it from the repository history using a dedicated history-rewrite tool.
+Any key previously pasted into chat, committed, or shared should be revoked and replaced in its provider dashboard.
 
 ## CSV input
 
-Upload a CSV containing a column whose name includes `comment`. If no such column exists, the first column is used.
+Upload a CSV containing a column whose name includes `comment`. If no matching column exists, the first column is used.

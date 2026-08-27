@@ -1,6 +1,8 @@
-Flask
-Flask-Session
+fastapi
+uvicorn[standard]
+python-multipart
 google-api-python-client
 freeflow-llm
 pandas
 openpyxl
+keyring

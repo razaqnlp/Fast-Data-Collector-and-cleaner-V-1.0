@@ -1,4 +1,8 @@
-from flask import Flask, render_template, request, flash, session, send_file, redirect, url_for
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from starlette.middleware.sessions import SessionMiddleware
 import googleapiclient.discovery
 from googleapiclient.errors import HttpError
 import re
@@ -8,26 +12,63 @@ import io
 import os
 import time
 import json
+import keyring
 from openpyxl import Workbook
-from flask_session import Session
+app = FastAPI(title="Romanized Pashto Sentiment Analyzer")
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=os.environ.get("FLASK_SECRET_KEY") or os.urandom(32).hex(),
+    same_site="lax",
+    https_only=False,
+)
+app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")), name="static")
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates"))
 
-app = Flask(__name__)
-app.secret_key = os.environ.get("FLASK_SECRET_KEY", "local-development-secret-change-me")
-app.config['SESSION_TYPE'] = 'filesystem'
-Session(app)
-
-# Config file for persistent API keys
-CONFIG_FILE = 'config.json'
+# API keys are stored in the operating system credential vault.
+CREDENTIAL_SERVICE = "Pul Romanized Pashto Sentiment Analyzer"
+CREDENTIAL_NAMES = (
+    "yt_api_key",
+    "groq_key1",
+    "groq_key2",
+    "gemini_key1",
+    "gemini_key2",
+    "chatgpt_api_key",
+)
+CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 def load_config():
+    legacy_config = {}
     if os.path.exists(CONFIG_FILE):
         with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+            legacy_config = json.load(f)
+
+    for name in CREDENTIAL_NAMES:
+        value = legacy_config.get(name, "").strip()
+        if value and not keyring.get_password(CREDENTIAL_SERVICE, name):
+            keyring.set_password(CREDENTIAL_SERVICE, name, value)
+
+    if legacy_config:
+        os.remove(CONFIG_FILE)
+
+    return {
+        name: keyring.get_password(CREDENTIAL_SERVICE, name) or ""
+        for name in CREDENTIAL_NAMES
+    }
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f)
+    for name in CREDENTIAL_NAMES:
+        value = config.get(name, "").strip()
+        if value:
+            keyring.set_password(CREDENTIAL_SERVICE, name, value)
+
+def flash(request, message, category="message"):
+    request.session.setdefault("flashes", []).append({"category": category, "message": message})
+
+def pop_flashed_messages(request):
+    return request.session.pop("flashes", [])
+
+def redirect_to_index():
+    return RedirectResponse(url="/", status_code=303)
 
 def clean_comments(text):
     if not isinstance(text, str):
@@ -48,16 +89,17 @@ def clean_comments(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
-@app.route("/", methods=["GET", "POST"])
-def index():
+@app.api_route("/", methods=["GET", "POST"])
+async def index(request: Request):
     config = load_config()
-    result_csv = session.get('result_csv', '')
-    stats = session.get('stats', {"total_imported": 0, "excluded": 0, "after_cleaning": 0, "source": ""})
-    raw_preview = session.get('raw_preview', [])
-    cleaned_preview = session.get('cleaned_preview', [])
+    result_csv = request.session.get('result_csv', '')
+    stats = request.session.get('stats', {"total_imported": 0, "excluded": 0, "after_cleaning": 0, "source": ""})
+    raw_preview = request.session.get('raw_preview', [])
+    cleaned_preview = request.session.get('cleaned_preview', [])
 
     if request.method == "POST":
-        mode = request.form.get("mode", "youtube")
+        form = await request.form()
+        mode = form.get("mode", "youtube")
 
         # Load API keys from config (since settings submit separately)
         yt_api_key = config.get("yt_api_key", "").strip()
@@ -76,33 +118,33 @@ def index():
 
         # ── Mode: Upload CSV ─────────────────────────────────────────────────────
         if mode == "upload":
-            if "csv_file" not in request.files:
-                flash("No file uploaded.", "error")
-                return redirect(url_for("index"))
+            file = form.get("csv_file")
+            if not isinstance(file, UploadFile):
+                flash(request, "No file uploaded.", "error")
+                return redirect_to_index()
 
-            file = request.files["csv_file"]
             if file.filename == "":
-                flash("No file selected.", "error")
-                return redirect(url_for("index"))
+                flash(request, "No file selected.", "error")
+                return redirect_to_index()
 
             try:
-                df = pd.read_csv(file, encoding="utf-8-sig")
+                df = pd.read_csv(io.BytesIO(await file.read()), encoding="utf-8-sig")
                 comment_col = next((col for col in df.columns if "comment" in col.lower()), df.columns[0])
                 raw_comments = df[comment_col].dropna().astype(str).tolist()
                 stats["source"] = "Uploaded CSV"
             except Exception as e:
-                flash(f"Error reading CSV: {str(e)}", "error")
-                return redirect(url_for("index"))
+                flash(request, f"Error reading CSV: {str(e)}", "error")
+                return redirect_to_index()
 
         # ── Mode: YouTube fetch ──────────────────────────────────────────────────
         else:
-            video_id = request.form.get("video_id", "").strip()
+            video_id = str(form.get("video_id", "")).strip()
             if not video_id:
-                flash("Please enter Video ID.", "error")
-                return redirect(url_for("index"))
+                flash(request, "Please enter Video ID.", "error")
+                return redirect_to_index()
             if not yt_api_key:
-                flash("YouTube API key required (set in Settings).", "error")
-                return redirect(url_for("index"))
+                flash(request, "YouTube API key required (set in Settings).", "error")
+                return redirect_to_index()
 
             try:
                 youtube = googleapiclient.discovery.build("youtube", "v3", developerKey=yt_api_key)
@@ -110,15 +152,15 @@ def index():
             except HttpError as e:
                 error_msg = str(e)
                 if "quota" in error_msg.lower():
-                    flash("YouTube API quota exceeded or limit reached. Wait for reset or check Google Cloud Console.", "error")
+                    flash(request, "YouTube API quota exceeded or limit reached. Wait for reset or check Google Cloud Console.", "error")
                 elif "invalid" in error_msg.lower() or "expired" in error_msg.lower():
-                    flash("YouTube API key invalid or expired. Please update in Settings.", "error")
+                    flash(request, "YouTube API key invalid or expired. Please update in Settings.", "error")
                 else:
-                    flash(f"YouTube API error: {error_msg}", "error")
-                return redirect(url_for("index"))
+                    flash(request, f"YouTube API error: {error_msg}", "error")
+                return redirect_to_index()
             except Exception as e:
-                flash(f"Connection failed: {str(e)}", "error")
-                return redirect(url_for("index"))
+                flash(request, f"Connection failed: {str(e)}", "error")
+                return redirect_to_index()
 
             next_page_token = None
             stats["source"] = "YouTube"
@@ -145,19 +187,19 @@ def index():
                     time.sleep(0.35)
 
                     if len(raw_comments) > 15000:
-                        flash("Safety limit reached (~15k comments).", "warning")
+                        flash(request, "Safety limit reached (~15k comments).", "warning")
                         break
 
                 except HttpError as e:
                     error_msg = str(e)
                     if "quota" in error_msg.lower():
-                        flash("YouTube API quota exceeded during fetch. Wait for reset.", "error")
+                        flash(request, "YouTube API quota exceeded during fetch. Wait for reset.", "error")
                     else:
-                        flash(f"Fetch error: {error_msg}", "error")
-                    return redirect(url_for("index"))
+                        flash(request, f"Fetch error: {error_msg}", "error")
+                    return redirect_to_index()
                 except Exception as e:
-                    flash(f"Unexpected error: {str(e)}", "error")
-                    return redirect(url_for("index"))
+                    flash(request, f"Unexpected error: {str(e)}", "error")
+                    return redirect_to_index()
 
         # ── Cleaning ─────────────────────────────────────────────────────────────
         for c in raw_comments:
@@ -170,12 +212,12 @@ def index():
         stats["excluded"] = stats["total_imported"] - stats["after_cleaning"]
 
         if not cleaned_comments:
-            flash("No usable Romanized comments after cleaning.", "warning")
-            return redirect(url_for("index"))
+            flash(request, "No usable Romanized comments after cleaning.", "warning")
+            return redirect_to_index()
 
 
         # LLM choice (from UI)
-        llm_choice = request.form.get("llm_choice", "freeflow")
+        llm_choice = form.get("llm_choice", "freeflow")
 
         user_input = "\n".join(cleaned_comments)
         system_instruction = """
@@ -202,14 +244,14 @@ triple check the final sentiment for each sentence and make sure to only include
 
         if llm_choice == "chatgpt":
             if not chatgpt_key:
-                flash("ChatGPT selected but no ChatGPT API key found in Settings.", "error")
-                return redirect(url_for("index"))
+                flash(request, "ChatGPT selected but no ChatGPT API key found in Settings.", "error")
+                return redirect_to_index()
             try:
                 try:
                     import openai
                 except Exception:
-                    flash("openai package not installed. Run: pip install openai", "error")
-                    return redirect(url_for("index"))
+                    flash(request, "openai package not installed. Run: pip install openai", "error")
+                    return redirect_to_index()
                 openai.api_key = chatgpt_key
                 messages = [
                     {"role": "system", "content": system_instruction},
@@ -225,8 +267,8 @@ triple check the final sentiment for each sentence and make sure to only include
         # If not using ChatGPT or ChatGPT failed, use FreeFlow (Gemini prioritized, then GROQ)
         if not result_csv:
             if not gemini_keys and not groq_keys:
-                flash("No valid LLM API keys provided for FreeFlow. Set at least one Gemini or Groq key in Settings.", "error")
-                return redirect(url_for("index"))
+                flash(request, "No valid LLM API keys provided for FreeFlow. Set at least one Gemini or Groq key in Settings.", "error")
+                return redirect_to_index()
 
             from freeflow_llm import GeminiProvider, GroqProvider
             try:
@@ -240,65 +282,80 @@ triple check the final sentiment for each sentence and make sure to only include
                         {"role": "system", "content": system_instruction},
                         {"role": "user", "content": user_input}
                     ]
-                    response = client.chat(messages=messages)
+                    response = client.chat(
+                        messages=messages,
+                        model="qwen/qwen3.6-27b"
+                    )
                 result_csv = response.content.strip()
             except Exception as e:
                 llm_error = str(e)
 
         if not result_csv or len(result_csv.splitlines()) < 1:
             if llm_error:
-                flash(f"LLM error: {llm_error}", "error")
+                flash(request, f"LLM error: {llm_error}", "error")
             else:
-                flash("No valid result from LLMs (Gemini/Groq).", "warning")
-            return redirect(url_for("index"))
+                flash(request, "No valid result from LLMs (Gemini/Groq).", "warning")
+            return redirect_to_index()
 
         # Store in session for previews and export
-        session['raw_comments'] = raw_comments
-        session['cleaned_comments'] = cleaned_comments
-        session['result_csv'] = result_csv
-        session['stats'] = stats
+        request.session['raw_comments'] = raw_comments
+        request.session['cleaned_comments'] = cleaned_comments
+        request.session['result_csv'] = result_csv
+        request.session['stats'] = stats
 
         # Previews (first 20)
         raw_preview = raw_comments[:20]
         cleaned_preview = cleaned_comments[:20]
 
-        session['raw_preview'] = raw_preview
-        session['cleaned_preview'] = cleaned_preview
+        request.session['raw_preview'] = raw_preview
+        request.session['cleaned_preview'] = cleaned_preview
 
-        flash("Processing complete! Scroll down to see data.", "success")
+        flash(request, "Processing complete! Scroll down to see data.", "success")
 
-        return redirect(url_for("index"))
+        return redirect_to_index()
 
-    return render_template("index.html", result_csv=result_csv, stats=stats, raw_preview=raw_preview, cleaned_preview=cleaned_preview, config=config)
+    messages = pop_flashed_messages(request)
+    config_status = {name: bool(value) for name, value in config.items()}
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={
+            "result_csv": result_csv,
+            "stats": stats,
+            "raw_preview": raw_preview,
+            "cleaned_preview": cleaned_preview,
+            "config": config_status,
+            "messages": messages,
+        },
+    )
 
-@app.route("/save_settings", methods=["POST"])
-def save_settings():
+@app.post("/save_settings")
+async def save_settings(request: Request):
+    form = await request.form()
     updated_config = {
-        "yt_api_key": request.form.get("yt_api_key", "").strip(),
-        "groq_key1": request.form.get("groq_key1", "").strip(),
-        "groq_key2": request.form.get("groq_key2", "").strip(),
-        "gemini_key1": request.form.get("gemini_key1", "").strip(),
-        "gemini_key2": request.form.get("gemini_key2", "").strip(),
-        "chatgpt_api_key": request.form.get("chatgpt_api_key", "").strip()
+        "yt_api_key": str(form.get("yt_api_key", "")).strip(),
+        "groq_key1": str(form.get("groq_key1", "")).strip(),
+        "groq_key2": str(form.get("groq_key2", "")).strip(),
+        "gemini_key1": str(form.get("gemini_key1", "")).strip(),
+        "gemini_key2": str(form.get("gemini_key2", "")).strip(),
+        "chatgpt_api_key": str(form.get("chatgpt_api_key", "")).strip()
     }
     save_config(updated_config)
-    flash("API settings saved successfully!", "success")
-    return redirect(url_for("index"))
+    flash(request, "API settings saved successfully!", "success")
+    return redirect_to_index()
 
-@app.route("/export/<filetype>")
-def export(filetype):
-    result_csv = session.get('result_csv', '')
+@app.get("/export/{filetype}")
+def export(request: Request, filetype: str):
+    result_csv = request.session.get('result_csv', '')
     if not result_csv:
-        flash("No sentiment data to export.", "error")
-        return redirect(url_for("index"))
+        flash(request, "No sentiment data to export.", "error")
+        return redirect_to_index()
 
     if filetype == "csv":
-        csv_buffer = io.StringIO(result_csv)
-        return send_file(
-            io.BytesIO(csv_buffer.getvalue().encode("utf-8-sig")),
-            mimetype="text/csv",
-            as_attachment=True,
-            download_name="sentiment_analysis.csv"
+        return StreamingResponse(
+            iter([result_csv.encode("utf-8-sig")]),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="sentiment_analysis.csv"'}
         )
 
     elif filetype == "excel":
@@ -306,15 +363,15 @@ def export(filetype):
         excel_buffer = io.BytesIO()
         df.to_excel(excel_buffer, index=False, engine='openpyxl')
         excel_buffer.seek(0)
-        return send_file(
+        return StreamingResponse(
             excel_buffer,
-            mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            as_attachment=True,
-            download_name="sentiment_analysis.xlsx"
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": 'attachment; filename="sentiment_analysis.xlsx"'}
         )
 
-    flash("Invalid export type.", "error")
-    return redirect(url_for("index"))
+    flash(request, "Invalid export type.", "error")
+    return redirect_to_index()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=5000, reload=os.environ.get("FLASK_DEBUG") == "1")
