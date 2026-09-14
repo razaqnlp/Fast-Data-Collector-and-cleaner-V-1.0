@@ -1,13 +1,27 @@
-# Romanized Pashto Sentiment Analyzer
+# Fast Data Collector and Cleaner V1.0
 
-A FastAPI app for collecting YouTube comments or uploading a CSV, cleaning Romanized Pashto text, classifying sentiment, and exporting CSV or Excel results.
+A FastAPI-based data collection and cleaning pipeline for Romanized Pashto text. The app currently runs locally with API-based processing and is ready for GitHub deployment without shipping any model files.
+
+## Current status
+
+This repository is the working local version that is already running correctly on a local computer. The model layer is not bundled in this GitHub repo yet, and the app is configured to use external APIs for now while the local model deployment is prepared.
+
+Model deployment is planned for the next release, and the repo will be updated once the hosted or packaged model is ready.
+
+## Features
+
+- Collect comments from YouTube or import CSV data
+- Clean comments by removing links, emojis, invalid characters, and noisy text
+- Detect Romanized Pashto entries
+- Classify sentiment labels for the processed dataset
+- Export cleaned or labeled results as CSV
+- Simple FastAPI dashboard UI
 
 ## Requirements
 
 - Python 3.10 or newer
 - A YouTube Data API v3 key for YouTube input
-- A Groq or Gemini key for FreeFlow, or an OpenAI key for ChatGPT mode
-- Windows Credential Manager for secure local API-key storage
+- API access for the current external model/detection workflow
 
 ## Setup
 
@@ -15,20 +29,23 @@ A FastAPI app for collecting YouTube comments or uploading a CSV, cleaning Roman
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-$env:FLASK_SECRET_KEY = "replace-with-a-long-random-value"
 python app.py
 ```
 
-Open http://127.0.0.1:5000.
+Open http://127.0.0.1:8000 in the browser.
 
-## Security
+## API-first usage
 
-Enter API keys through the in-app Settings panel. On Windows, `keyring` stores them in Windows Credential Manager. Keys are never written to the repository or rendered back into the browser. Blank fields keep existing stored keys unchanged.
+Because the model files are not included in this public repo yet, the app is designed to use APIs for the current local working setup. This means the app is ready to run on a local machine without shipping model binaries or heavy ML assets.
 
-The app defaults to localhost and uses Uvicorn's development server. Set `FLASK_SECRET_KEY` before use and use a production ASGI server plus authentication before exposing it beyond the local machine. Never commit API keys, session files, `.env` files, or generated data.
+When model deployment is complete, the repository will be updated to include the appropriate packaged or hosted model configuration.
 
-Any key previously pasted into chat, committed, or shared should be revoked and replaced in its provider dashboard.
+## Notes
+
+- Model files such as `.bin`, `.model`, `*.pt`, and similar artifacts are intentionally ignored and are not pushed to GitHub.
+- The app is working locally and is being prepared for deployment in stages.
+- The project should be treated as an API-first build until the full model deployment is ready.
 
 ## CSV input
 
-Upload a CSV containing a column whose name includes `comment`. If no matching column exists, the first column is used.
+Upload a CSV containing a comment column. If a matching comment column is not found, the app falls back to the first usable column automatically.

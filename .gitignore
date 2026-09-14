@@ -6,3 +6,15 @@ config.json
 flask_session/
 *.log
 .vscode/
+*.bin
+*.model
+*.safetensors
+*.pt
+*.onnx
+large-models/
+models/
+
+# Local project artifacts
+files (6)/
+app1.py
+pashto_classifier.bin
