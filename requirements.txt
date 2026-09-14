@@ -2,7 +2,12 @@ fastapi
 uvicorn[standard]
 python-multipart
 google-api-python-client
-freeflow-llm
+fasttext-wheel
+numpy<2
+huggingface_hub
 pandas
 openpyxl
 keyring
+jinja2
+torch
+transformers

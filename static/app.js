@@ -1,142 +1,75 @@
 (function () {
   "use strict";
+  var shell = document.querySelector('.shell');
+  var stepItems = document.querySelectorAll('.step-item');
+  var stepPanels = document.querySelectorAll('.step-panel');
 
-  var openBtn = document.getElementById("openSettings");
-  var closeBtn = document.getElementById("closeSettings");
-  var panel = document.getElementById("settingsPanel");
-  var scrim = document.getElementById("scrim");
-
-  function openPanel() {
-    panel.classList.add("is-open");
-    scrim.classList.add("is-open");
-    panel.setAttribute("aria-hidden", "false");
-    openBtn.setAttribute("aria-expanded", "true");
+  function activateStep(step) {
+    stepItems.forEach(function (item) { item.classList.toggle('is-active', item.dataset.step === String(step)); });
+    stepPanels.forEach(function (panel) { panel.classList.toggle('is-active', panel.dataset.panel === String(step)); });
   }
-  function closePanel() {
-    panel.classList.remove("is-open");
-    scrim.classList.remove("is-open");
-    panel.setAttribute("aria-hidden", "true");
-    openBtn.setAttribute("aria-expanded", "false");
-  }
-  if (openBtn) openBtn.addEventListener("click", openPanel);
-  var openSecondary = document.getElementById("openSettingsSecondary");
-  if (openSecondary) openSecondary.addEventListener("click", openPanel);
-  if (closeBtn) closeBtn.addEventListener("click", closePanel);
-  if (scrim) scrim.addEventListener("click", closePanel);
-  document.addEventListener("keydown", function (event) {
-    if (event.key === "Escape") closePanel();
+  stepItems.forEach(function (item) {
+    item.addEventListener('click', function () {
+      if (item.dataset.unlocked !== 'false') activateStep(item.dataset.step);
+    });
   });
+  activateStep((shell && shell.dataset.defaultStep) || '1');
 
-  var modeRadios = document.querySelectorAll('input[name="mode"]');
-  var panelYoutube = document.getElementById("panel-youtube");
-  var panelUpload = document.getElementById("panel-upload");
+  var panel = document.getElementById('settingsPanel');
+  var scrim = document.getElementById('scrim');
+  var openSettings = document.getElementById('openSettings');
+  var closeSettings = document.getElementById('closeSettings');
+  function openPanel() { panel.classList.add('is-open'); scrim.classList.add('is-open'); panel.setAttribute('aria-hidden', 'false'); }
+  function closePanel() { panel.classList.remove('is-open'); scrim.classList.remove('is-open'); panel.setAttribute('aria-hidden', 'true'); }
+  if (openSettings) openSettings.addEventListener('click', openPanel);
+  if (closeSettings) closeSettings.addEventListener('click', closePanel);
+  if (scrim) scrim.addEventListener('click', closePanel);
+  document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closePanel(); });
+
+  var modeYoutube = document.getElementById('mode-youtube');
+  var modeUpload = document.getElementById('mode-upload');
+  var panelYoutube = document.getElementById('panel-youtube');
+  var panelUpload = document.getElementById('panel-upload');
+  var videoId = document.getElementById('video_id');
+  var csvFile = document.getElementById('csv_file');
   function syncMode() {
-    var checked = document.querySelector('input[name="mode"]:checked');
-    var mode = checked ? checked.value : "youtube";
-    if (panelYoutube) panelYoutube.hidden = mode !== "youtube";
-    if (panelUpload) panelUpload.hidden = mode !== "upload";
+    var upload = modeUpload && modeUpload.checked;
+    if (panelYoutube) panelYoutube.hidden = upload;
+    if (panelUpload) panelUpload.hidden = !upload;
+    if (videoId) videoId.required = !upload;
+    if (csvFile) csvFile.required = !!upload;
   }
-  modeRadios.forEach(function (radio) { radio.addEventListener("change", syncMode); });
+  if (modeYoutube) modeYoutube.addEventListener('change', syncMode);
+  if (modeUpload) modeUpload.addEventListener('change', syncMode);
   syncMode();
 
-  var dropzone = document.getElementById("dropzone");
-  var fileInput = document.getElementById("csv_file");
-  var dzFilename = document.getElementById("dzFilename");
-  function showFilename() {
-    if (fileInput.files && fileInput.files.length) {
-      dzFilename.textContent = fileInput.files[0].name;
-    } else {
-      dzFilename.textContent = "";
-    }
-  }
-  if (dropzone && fileInput) {
-    ["dragenter", "dragover"].forEach(function (eventName) {
-      dropzone.addEventListener(eventName, function (event) {
-        event.preventDefault();
-        dropzone.classList.add("is-dragover");
-      });
-    });
-    ["dragleave", "drop"].forEach(function (eventName) {
-      dropzone.addEventListener(eventName, function (event) {
-        event.preventDefault();
-        dropzone.classList.remove("is-dragover");
-      });
-    });
-    dropzone.addEventListener("drop", function (event) {
-      if (event.dataTransfer.files.length) {
-        fileInput.files = event.dataTransfer.files;
-        showFilename();
-      }
-    });
-    fileInput.addEventListener("change", showFilename);
-  }
+  var dropzone = document.getElementById('dropzone');
+  var filename = document.getElementById('dzFilename');
+  if (csvFile) csvFile.addEventListener('change', function () { filename.textContent = csvFile.files.length ? csvFile.files[0].name : ''; });
+  if (dropzone) dropzone.addEventListener('drop', function (event) { event.preventDefault(); if (event.dataTransfer.files.length) { csvFile.files = event.dataTransfer.files; filename.textContent = event.dataTransfer.files[0].name; } });
+  if (dropzone) ['dragenter', 'dragover'].forEach(function (name) { dropzone.addEventListener(name, function (event) { event.preventDefault(); dropzone.classList.add('is-dragover'); }); });
+  if (dropzone) ['dragleave', 'drop'].forEach(function (name) { dropzone.addEventListener(name, function (event) { event.preventDefault(); dropzone.classList.remove('is-dragover'); }); });
 
-  document.querySelectorAll(".tab").forEach(function (tab) {
-    tab.addEventListener("click", function () {
-      var target = tab.getAttribute("data-tab");
-      document.querySelectorAll(".tab").forEach(function (item) {
-        item.classList.toggle("is-active", item === tab);
-        item.setAttribute("aria-selected", item === tab ? "true" : "false");
-      });
-      document.querySelectorAll(".tab-panel").forEach(function (item) {
-        item.hidden = item.getAttribute("data-panel") !== target;
-      });
-    });
+  var mainForm = document.getElementById('mainForm');
+  var submitBtn = document.getElementById('submitBtn');
+  if (mainForm) mainForm.addEventListener('submit', function (event) {
+    if (modeUpload && modeUpload.checked && (!csvFile.files || !csvFile.files.length)) { event.preventDefault(); filename.textContent = 'Choose a CSV file before continuing.'; return; }
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Cleaning...'; }
   });
 
-  document.querySelectorAll(".flash-close").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var flash = button.closest(".flash");
-      if (flash) flash.remove();
-    });
-  });
+  document.querySelectorAll('.tab').forEach(function (tab) { tab.addEventListener('click', function () { var target = tab.dataset.tab; var parent = tab.closest('.step-panel'); parent.querySelectorAll('.tab').forEach(function (item) { item.classList.toggle('is-active', item === tab); }); parent.querySelectorAll('.tab-panel').forEach(function (panel) { panel.hidden = panel.dataset.panel !== target; }); }); });
+  document.querySelectorAll('[data-flash] .flash-close').forEach(function (button) { button.addEventListener('click', function () { button.closest('[data-flash]').remove(); }); });
 
-  var form = document.getElementById("mainForm");
-  var submitBtn = document.getElementById("submitBtn");
-  if (form && submitBtn) {
-    form.addEventListener("submit", function () {
-      submitBtn.disabled = true;
-      submitBtn.querySelector(".btn-label").textContent = "Analyzing...";
-    });
+  var template = document.getElementById('resultCsvData');
+  var body = document.getElementById('resultsBody');
+  function parseCsv(raw) {
+    var rows = [], row = [], field = '', quoted = false;
+    for (var i = 0; i < raw.length; i += 1) { var c = raw[i]; if (quoted) { if (c === '"' && raw[i + 1] === '"') { field += '"'; i += 1; } else if (c === '"') quoted = false; else field += c; } else if (c === '"') quoted = true; else if (c === ',') { row.push(field); field = ''; } else if (c === '\n' || c === '\r') { if (c === '\r' && raw[i + 1] === '\n') i += 1; row.push(field); if (row.length) rows.push(row); row = []; field = ''; } else field += c; }
+    if (field || row.length) { row.push(field); rows.push(row); } return rows.filter(function (item) { return item[0]; });
   }
-
-  var csvTemplate = document.getElementById("resultCsvData");
-  var resultsBody = document.getElementById("resultsBody");
-  function parseCsvLine(line) {
-    var result = [], current = "", inQuotes = false;
-    for (var i = 0; i < line.length; i += 1) {
-      var character = line[i];
-      if (character === '"') inQuotes = !inQuotes;
-      else if (character === "," && !inQuotes) { result.push(current); current = ""; }
-      else current += character;
-    }
-    result.push(current);
-    return result;
+  function labelClass(label) {
+    var value = (label || '').toLowerCase();
+    return value.indexOf('pos') === 0 ? 'pill-positive' : value.indexOf('neg') === 0 ? 'pill-negative' : 'pill-neutral';
   }
-  function sentimentClass(label) {
-    var value = (label || "").trim().toLowerCase();
-    if (value.indexOf("pos") === 0) return "pill-positive";
-    if (value.indexOf("neg") === 0) return "pill-negative";
-    return "pill-neutral";
-  }
-  if (csvTemplate && resultsBody) {
-    var lines = csvTemplate.textContent.trim().split(/\r?\n/).filter(function (line) { return line.trim(); });
-    var fragment = document.createDocumentFragment();
-    lines.forEach(function (line) {
-      var parts = parseCsvLine(line);
-      if (parts.length < 2) return;
-      var row = document.createElement("tr");
-      var sentenceCell = document.createElement("td");
-      sentenceCell.textContent = parts.slice(0, -1).join(",").trim();
-      var sentimentCell = document.createElement("td");
-      var pill = document.createElement("span");
-      pill.className = "pill " + sentimentClass(parts[parts.length - 1]);
-      pill.textContent = parts[parts.length - 1].trim();
-      sentimentCell.appendChild(pill);
-      row.appendChild(sentenceCell);
-      row.appendChild(sentimentCell);
-      fragment.appendChild(row);
-    });
-    resultsBody.appendChild(fragment);
-  }
+  if (template && body) { parseCsv(template.textContent.trim()).forEach(function (cols) { var tr = document.createElement('tr'); var sentence = document.createElement('td'); sentence.textContent = cols[0]; var sentiment = document.createElement('td'); var badge = document.createElement('span'); badge.className = 'pill ' + labelClass(cols[1]); badge.textContent = cols[1] || 'neutral'; sentiment.appendChild(badge); tr.appendChild(sentence); tr.appendChild(sentiment); body.appendChild(tr); }); }
 })();
