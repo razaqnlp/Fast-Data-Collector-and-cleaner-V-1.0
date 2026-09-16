@@ -15,7 +15,20 @@ Model deployment is planned for the next release, and the repo will be updated o
 - Detect Romanized Pashto entries
 - Classify sentiment labels for the processed dataset
 - Export cleaned or labeled results as CSV
-- Simple FastAPI dashboard UI
+- Dark three-pane FastAPI dashboard UI
+
+## UI update
+
+The dashboard now uses the newer UI design from the `files (7)` source folder. The updated experience includes:
+
+- Clear pipeline navigation for cleaning, Pashto detection, and sentiment
+- Larger, more readable typography and form controls
+- YouTube and CSV input switching with CSV drag-and-drop
+- Raw and cleaned comment preview tabs
+- Sentiment search, label filtering, editable labels, and CSV export
+- Right-side batch, pipeline, label distribution, and API settings panels
+
+The interface remains API-first while model deployment is prepared for a future release.
 
 ## Requirements
 
