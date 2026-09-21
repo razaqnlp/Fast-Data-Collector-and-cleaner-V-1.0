@@ -9,7 +9,7 @@
 <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}">
 </head>
 <body>
-{% set step_index = 1 %}
+{% set step_index = 'collector' if show_collector else 1 %}
 {% if stage == 'cleaned' %}{% set step_index = 2 %}
 {% elif stage == 'detected' %}{% set step_index = 3 %}
 {% elif stage == 'sentiment' %}{% set step_index = 3 %}{% endif %}
@@ -21,6 +21,7 @@
   <aside class="rail rail-left">
     <div class="brand">Pul</div>
     <nav class="nav" aria-label="Pipeline steps">
+      <button type="button" class="nav-item" data-step="collector" data-unlocked="true"><span class="nav-num">00</span><span>Collect data</span></button>
       <button type="button" class="nav-item is-active" data-step="1" data-unlocked="true"><span class="nav-num">01</span><span>Clean</span></button>
       <button type="button" class="nav-item" data-step="2" data-unlocked="{{ 'true' if step2_unlocked else 'false' }}"><span class="nav-num">02</span><span>Detect</span></button>
       <button type="button" class="nav-item" data-step="3" data-unlocked="{{ 'true' if step3_unlocked else 'false' }}"><span class="nav-num">03</span><span>Sentiment</span></button>
@@ -33,48 +34,147 @@
 
   <main class="stage">
     <div id="flashes" class="flashes">
-      {% for m in messages %}
+      {% for m in messages if m.category != 'duplicate' %}
       <div class="flash flash-{{ m.category }}" data-flash><span>{{ m.message }}</span><button class="flash-close" aria-label="Dismiss">&times;</button></div>
       {% endfor %}
     </div>
 
+    <!-- SOURCE COLLECTION -->
+    <section class="source-panel" data-panel="collector">
+      {% set duplicate_messages = messages|selectattr('category', 'equalto', 'duplicate')|list %}
+      <div class="stage-head">
+        <div>
+          <p class="eyebrow">Source collector</p>
+          <h1>Collect data</h1>
+        </div>
+      </div>
+
+      <div class="collector-box">
+        <div class="collector-section-head">
+          <div>
+            <h2>Import from this device</h2>
+            <p>Start with a CSV you already have on your computer.</p>
+          </div>
+          <span class="collector-status">Ready</span>
+        </div>
+        <form method="POST" action="{{ url_for('import_csv') }}" enctype="multipart/form-data" class="device-import-form">
+          <label class="dropzone device-dropzone" for="collector_csv_file" id="collectorDropzone">
+            <span class="drop-icon">↑</span>
+            <span><strong>Choose a CSV file</strong><small>Comments should be in one column</small></span>
+            <span class="dz-filename" id="collectorFilename"></span>
+          </label>
+          <input type="file" id="collector_csv_file" name="csv_file" accept=".csv" required hidden>
+          <button type="submit" class="btn btn-primary">Use this file</button>
+        </form>
+      </div>
+
+      <div class="collector-divider"><span>or collect from social media</span></div>
+
+      <div class="collector-box social-box">
+        <div class="collector-section-head">
+          <div>
+            <h2>Collect from social media</h2>
+            <p>More source connectors will be added here later.</p>
+          </div>
+        </div>
+        <button type="button" class="source-choice{% if duplicate_messages %} is-open{% endif %}" id="youtubeChoice" aria-expanded="{{ 'true' if duplicate_messages else 'false' }}" aria-controls="youtubeCollector">
+          <span class="source-icon youtube-icon">▶</span>
+          <span><strong>YouTube</strong><small>Collect comments from a video</small></span>
+          <span class="source-chevron">{{ '−' if duplicate_messages else '+' }}</span>
+        </button>
+        <div class="youtube-collector" id="youtubeCollector"{% if not duplicate_messages %} hidden{% endif %}>
+          <form method="POST" action="{{ url_for('collect_youtube') }}" class="collector-form" id="youtubeForm">
+            <div class="field">
+              <label for="collector_video_id">YouTube video ID</label>
+              <input type="text" id="collector_video_id" name="video_id" placeholder="e.g. -15tDWN6Ad8" required>
+            </div>
+            <button type="submit" class="btn btn-primary" id="youtubeSubmit"><span class="button-label">Collect comments</span><span class="button-spinner" aria-hidden="true"></span></button>
+          </form>
+          {% for m in duplicate_messages %}
+          <div class="duplicate-notice" role="alert">
+            <span>{{ m.message }} Video ID: <strong>{{ m.video_id }}</strong></span>
+            <form method="POST" action="{{ url_for('collect_youtube') }}" class="duplicate-force-form">
+              <input type="hidden" name="video_id" value="{{ m.video_id }}">
+              <input type="hidden" name="force_rescrape" value="1">
+              <input type="hidden" name="edit_filename" value="1">
+              <label class="duplicate-filename-label" for="duplicateFilename">New CSV name</label>
+              <input type="text" id="duplicateFilename" name="custom_filename" value="{{ m.custom_filename or '' }}" placeholder="Optional filename">
+              <button type="submit" class="duplicate-force-link">I know - scrape again</button>
+            </form>
+          </div>
+          {% endfor %}
+          <label class="auto-download-option"><input type="checkbox" id="autoDownloadToggle"><span class="tick-box" aria-hidden="true">✓</span><span>Auto-download new CSV files</span></label>
+          <label class="auto-download-option"><input type="checkbox" id="editFilenameToggle" name="edit_filename" value="1" form="youtubeForm"><span class="tick-box" aria-hidden="true">✓</span><span>Edit downloaded CSV name</span></label>
+          <div class="filename-editor" id="filenameEditor" hidden>
+            <label for="customFilename">CSV filename</label>
+            <input type="text" id="customFilename" name="custom_filename" form="youtubeForm" placeholder="e.g. lecture_comments.csv" autocomplete="off">
+          </div>
+          <p class="collector-loading-status" id="collectorLoadingStatus" role="status" aria-live="polite" hidden><span class="loading-spinner" aria-hidden="true"></span>Collecting comments from YouTube...</p>
+          <p class="collector-help">Comments will be saved as a numbered CSV on this computer. Collection does not clean or classify the data.</p>
+        </div>
+      </div>
+
+      {% if collected_comments %}
+      <div class="collector-box collected-box">
+        <div class="collector-section-head">
+          <div>
+            <h2>Collected data</h2>
+            <p>{{ collected_filename }} · {{ collected_comments|length }} comments</p>
+          </div>
+          <a href="{{ url_for('export', filetype='collected') }}" class="btn btn-ghost">Download CSV</a>
+        </div>
+        <div class="sheet-wrap">
+          <table class="data-sheet">
+            <thead><tr><th>#</th><th>Comment</th></tr></thead>
+            <tbody>
+              {% for comment in collected_comments %}
+              <tr><td class="row-number">{{ loop.index }}</td><td>{{ comment }}</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {% endif %}
+    </section>
+
     <!-- STEP 1: CLEAN -->
     <section class="stage-panel is-active" data-panel="1">
-      <div class="stage-head"><h1>Clean</h1></div>
+      <div class="stage-head">
+        <div>
+          <p class="eyebrow">Processing pipeline</p>
+          <h1>Clean</h1>
+        </div>
+      </div>
 
-      <form method="POST" action="{{ url_for('process_clean') }}" enctype="multipart/form-data" id="mainForm">
+      <p class="section-intro">Upload a comment CSV to begin the analysis pipeline.</p>
+      <div class="import-info" id="importInfo" aria-live="polite">
+        <div class="import-info-head">
+          <div>
+            <p class="eyebrow">Imported data</p>
+            <h2 id="importInfoTitle">{{ import_info.filename or 'No file selected' }}</h2>
+          </div>
+          <span class="import-info-badge" id="importInfoStatus">{{ 'Ready to clean' if import_info.filename else 'Waiting' }}</span>
+        </div>
+        <div class="import-info-grid">
+          <div><span>File size</span><strong id="importFileSize">{{ ((import_info.file_size / 1024)|round(1)) ~ ' KB' if import_info.file_size else '-' }}</strong></div>
+          <div><span>Rows</span><strong id="importRowCount">{{ stats.total_imported or '-' }}</strong></div>
+          <div><span>Columns</span><strong id="importColumnCount">{{ import_info.columns|length or '-' }}</strong></div>
+          <div><span>Comment column</span><strong id="importCommentColumn">{{ import_info.comment_column or '-' }}</strong></div>
+        </div>
+        <p class="import-columns" id="importColumns">{{ 'Columns: ' ~ import_info.columns|join(' · ') if import_info.columns else 'Choose a CSV to inspect its structure before cleaning.' }}</p>
+      </div>
+      <form method="POST" action="{{ url_for('process_clean') }}" id="mainForm">
         <input type="hidden" name="llm_choice" value="staged">
-
-        <div class="segmented" role="tablist" aria-label="Input source">
-          <input type="radio" name="mode" id="mode-youtube" value="youtube" checked>
-          <label for="mode-youtube" role="tab">YouTube</label>
-          <input type="radio" name="mode" id="mode-upload" value="upload">
-          <label for="mode-upload" role="tab">Upload CSV</label>
-          <span class="segmented-thumb" aria-hidden="true"></span>
-        </div>
-
-        <div class="mode-panel" id="panel-youtube">
-          <div class="field"><label for="video_id">Video ID</label><input type="text" id="video_id" name="video_id" placeholder="-15tDWN6Ad8"></div>
-        </div>
-
-        <div class="mode-panel" id="panel-upload" hidden>
-          <label class="dropzone" for="csv_file" id="dropzone">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 15V4M12 4l-4 4M12 4l4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
-            <span class="dz-title">Drop CSV</span>
-            <span class="dz-filename" id="dzFilename"></span>
-          </label>
-          <input type="file" id="csv_file" name="csv_file" accept=".csv" hidden>
-        </div>
 
         <div class="field-group">
           <p class="group-label">Cleaning rules</p>
           <div class="check-grid">
-            <label class="check"><input type="checkbox" name="remove_duplicates" checked><span>Duplicates</span></label>
-            <label class="check"><input type="checkbox" name="remove_links" checked><span>Links</span></label>
-            <label class="check"><input type="checkbox" name="remove_emojis" checked><span>Emoji</span></label>
-            <label class="check"><input type="checkbox" name="remove_mentions_tags" checked><span>@mentions / #tags</span></label>
-            <label class="check"><input type="checkbox" name="remove_short" checked><span>Very short comments</span></label>
-            <label class="check"><input type="checkbox" name="normalize_whitespace" checked><span>Whitespace</span></label>
+            <label class="check"><input type="checkbox" name="remove_duplicates" checked><span>Remove duplicates</span></label>
+            <label class="check"><input type="checkbox" name="remove_links" checked><span>Remove links</span></label>
+            <label class="check"><input type="checkbox" name="remove_emojis" checked><span>Remove emoji</span></label>
+            <label class="check"><input type="checkbox" name="remove_mentions_tags" checked><span>Remove @mentions / #tags</span></label>
+            <label class="check"><input type="checkbox" name="remove_short"><span>Remove short comments</span></label>
+            <label class="check"><input type="checkbox" name="normalize_whitespace" checked><span>Normalize whitespace</span></label>
           </div>
         </div>
 

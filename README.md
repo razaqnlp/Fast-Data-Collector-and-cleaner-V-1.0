@@ -1,6 +1,24 @@
-# Fast Data Collector and Cleaner V1.0
+# Fast Data Collector and Cleaner v1.1.0
 
 A FastAPI-based data collection and cleaning pipeline for Romanized Pashto text. The app currently runs locally with API-based processing and is ready for GitHub deployment without shipping any model files.
+
+## Latest release: v1.1.0
+
+Version 1.1.0 is the new backward-compatible release of the original v1.0 project. It keeps the existing cleaning, language detection, sentiment analysis, and export workflow while substantially improving YouTube collection and project maintainability.
+
+### What's new in v1.1.0
+
+- Added structured YouTube dataset columns: `id`, `video_id`, `original_text`, and `collection_date`
+- Added Excel-friendly CSV output with reliable comma-column detection
+- Added duplicate YouTube video ID detection with an inline warning
+- Added an explicit **I know - scrape again** action for intentional re-scraping
+- Added persistent auto-download for newly scraped CSV files
+- Added an opt-in custom CSV filename with collision-safe naming
+- Added visible collection progress feedback and a loading spinner
+- Added support for importing the generated CSV format through `original_text`
+- Removed obsolete source copies, local runtime artifacts, and model files from the GitHub project
+
+See [CHANGELOG.md](CHANGELOG.md) for the release history.
 
 ## Current status
 
@@ -16,10 +34,22 @@ Model deployment is planned for the next release, and the repo will be updated o
 - Classify sentiment labels for the processed dataset
 - Export cleaned or labeled results as CSV
 - Dark three-pane FastAPI dashboard UI
+- Separate YouTube comment collection with sequential local CSV saving
 
-## UI update
+## Workflow
 
-The dashboard now uses the newer UI design from the `files (7)` source folder. The updated experience includes:
+Data collection and text processing are intentionally separate:
+
+1. Open **Collect data**, enter a YouTube video ID, and collect the comments.
+2. The collector saves a numbered file such as `youtube_comments_001.csv` in the local `collected_data` folder.
+3. Open **Clean** and upload that saved CSV, or upload a CSV from another source.
+4. Continue through **Detect** and **Sentiment**.
+
+This structure leaves room for additional source collectors, such as X or other social platforms, without mixing collection controls into the processing pipeline.
+
+## UI
+
+The dashboard UI is served directly from the `templates/` and `static/` folders. It includes:
 
 - Clear pipeline navigation for cleaning, Pashto detection, and sentiment
 - Larger, more readable typography and form controls

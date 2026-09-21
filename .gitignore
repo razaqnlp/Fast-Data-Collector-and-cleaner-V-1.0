@@ -13,8 +13,9 @@ flask_session/
 *.onnx
 large-models/
 models/
+collected_data/
 
 # Local project artifacts
-files (6)/
+files (7)/
 app1.py
 pashto_classifier.bin

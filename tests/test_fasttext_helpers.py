@@ -1,6 +1,10 @@
 import unittest
 
-from app import parse_hf_prediction_output, normalize_hf_prediction_label
+from app import (
+    fallback_pashto_prediction,
+    parse_hf_prediction_output,
+    normalize_hf_prediction_label,
+)
 
 
 class TestHFDetectorHelpers(unittest.TestCase):
@@ -16,6 +20,10 @@ class TestHFDetectorHelpers(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             parse_hf_prediction_output({"error": "ZeroGPU quota exceeded"})
+
+    def test_fallback_pashto_prediction(self):
+        self.assertEqual(fallback_pashto_prediction("da khabar sta khapare"), "pashto")
+        self.assertEqual(fallback_pashto_prediction("this is a normal english sentence"), "not_pashto")
 
 
 if __name__ == "__main__":
